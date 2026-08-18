@@ -11,10 +11,10 @@ class ProductStockModel(BaseModel):
 
 class ProductShippingModel(BaseModel):
     """Embedded model representing shipping dimensions."""
-    weight: float = 0.5  # kg
-    length: float = 10.0 # cm
-    width: float = 10.0  # cm
-    height: float = 10.0 # cm
+    weight: float        # kg (Mandatory)
+    length: float = 10.0 # cm (Optional, default 10.0)
+    width: float = 10.0  # cm (Optional, default 10.0)
+    height: float = 10.0 # cm (Optional, default 10.0)
 
 class ProductAttributeModel(BaseModel):
     """Embedded model representing an assigned attribute to a product."""

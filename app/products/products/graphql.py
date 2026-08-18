@@ -416,10 +416,10 @@ class UpdateProductGroupInput:
 
 @strawberry.input
 class ShippingDimensionsInput:
-    weight: float = 0.5
-    length: float = 10.0
-    width: float = 10.0
-    height: float = 10.0
+    weight: Optional[float] = strawberry.field(default=None) # Mandatory: Must be provided > 0
+    length: Optional[float] = strawberry.field(default=10.0)
+    width: Optional[float] = strawberry.field(default=10.0)
+    height: Optional[float] = strawberry.field(default=10.0)
 
 @strawberry.input
 class CreateProductInput:

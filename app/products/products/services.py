@@ -137,8 +137,18 @@ class ProductService:
             if not parent:
                 raise ValidationError(f"Parent product {parent_id} not found or belongs to another tenant.")
 
+        weight = shipping_dimensions.get("weight") if shipping_dimensions else None
+        if weight is None or float(weight) <= 0:
+            raise ValidationError("Product weight is mandatory and must be greater than 0 kg.")
+
         from app.products.products.mongo_models import ProductShippingModel
-        shipping = ProductShippingModel(**shipping_dimensions) if shipping_dimensions else None
+        shipping_data = {
+            "weight": float(weight),
+            "length": float(shipping_dimensions.get("length") or 10.0) if shipping_dimensions else 10.0,
+            "width": float(shipping_dimensions.get("width") or 10.0) if shipping_dimensions else 10.0,
+            "height": float(shipping_dimensions.get("height") or 10.0) if shipping_dimensions else 10.0,
+        }
+        shipping = ProductShippingModel(**shipping_data)
 
         product = Product(
             tenant_id=tenant_id,
@@ -158,12 +168,7 @@ class ProductService:
             action="PRODUCT_CREATED",
             tenant_id=str(tenant_id),
             user_id=str(user_id) if user_id else None,
-            details={
-                "product_id": str(product.id),
-                "title": title,
-                "sku": sku,
-                "product_type": product_type
-            }
+            details={"product_id": str(product.id), "title": title, "sku": sku}
         )
 
         return product
@@ -175,7 +180,7 @@ class ProductService:
         user_id: Optional[uuid.UUID] = None,
         **kwargs
     ) -> Product:
-        """Update an existing product."""
+        """Update an existing Product under a tenant."""
         product = await ProductService.get_product_by_id(tenant_id, product_id)
         if not product:
             raise ValidationError("Product not found or belongs to another tenant.")
@@ -202,7 +207,19 @@ class ProductService:
             ship_dims = kwargs.pop("shipping_dimensions")
             if ship_dims:
                 from app.products.products.mongo_models import ProductShippingModel
-                product.shipping = ProductShippingModel(**ship_dims)
+                weight = ship_dims.get("weight")
+                if weight is None and product.shipping:
+                    weight = product.shipping.weight
+                if weight is None or float(weight) <= 0:
+                    raise ValidationError("Product weight is mandatory and must be greater than 0 kg.")
+                
+                shipping_data = {
+                    "weight": float(weight),
+                    "length": float(ship_dims.get("length") or (product.shipping.length if product.shipping else 10.0)),
+                    "width": float(ship_dims.get("width") or (product.shipping.width if product.shipping else 10.0)),
+                    "height": float(ship_dims.get("height") or (product.shipping.height if product.shipping else 10.0)),
+                }
+                product.shipping = ProductShippingModel(**shipping_data)
 
         for field, value in kwargs.items():
             if hasattr(product, field):

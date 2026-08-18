@@ -76,7 +76,7 @@ class CartItemType:
     updated_at: datetime
 
     @strawberry.field
-    async def product(self, info: strawberry.Info) -> ProductType:
+    async def product(self, info: strawberry.Info) -> Optional[ProductType]:
         from app.products.products.services import product_service
         db = info.context.db
         tenant_id = info.context.tenant_id or (info.context.user.tenant_id if info.context.user else None)
@@ -84,7 +84,7 @@ class CartItemType:
             raise ValidationError("Tenant ID context is missing.")
         db_product = await product_service.get_product_by_id(tenant_id, self.product_id)
         if not db_product:
-            raise ValidationError("Product not found.")
+            return None
         return ProductType(db_product)
 
     def __init__(self, db_item):
@@ -122,10 +122,21 @@ class UserCartType:
     async def items(self, info: strawberry.Info) -> list[CartItemType]:
         db = info.context.db
         from app.users.models import CartItem
+        from app.products.products.services import product_service
         from sqlalchemy.future import select
+        
+        tenant_id = info.context.tenant_id or (info.context.user.tenant_id if info.context.user else None)
+        
         stmt = select(CartItem).where(CartItem.cart_id == self.id)
         res = await db.execute(stmt)
         db_items = res.scalars().all()
+        
+        if tenant_id and db_items:
+            product_ids = [item.product_id for item in db_items]
+            valid_products = await product_service.get_product_by_ids(tenant_id, product_ids)
+            valid_pids = {p.id for p in valid_products}
+            return [CartItemType(item) for item in db_items if item.product_id in valid_pids]
+            
         return [CartItemType(item) for item in db_items]
 
     @strawberry.field
