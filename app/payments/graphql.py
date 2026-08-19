@@ -328,3 +328,33 @@ class PaymentMutation:
         )
         from app.orders.graphql import OrderType
         return OrderType(order)
+
+    @strawberry.mutation
+    async def verify_cart_payment(
+        self,
+        info: strawberry.Info,
+        payment_id: str,
+        signature: str,
+        razorpay_order_id: str
+    ) -> Annotated["OrderType", strawberry.lazy("app.orders.graphql")]:
+        """Verify an online Razorpay payment for a cart, create the order, and clear the cart."""
+        current_user = info.context.user
+        if not current_user:
+            raise UnauthorizedError("Not authenticated.")
+
+        db = info.context.db
+        tenant_id = info.context.tenant_id or current_user.tenant_id
+        if not tenant_id:
+            raise ValidationError("Tenant ID context is missing.")
+
+        order = await PaymentGatewayService.verify_cart_payment(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=current_user.id,
+            payment_id=payment_id,
+            signature=signature,
+            rzp_order_id=razorpay_order_id
+        )
+        from app.orders.graphql import OrderType
+        return OrderType(order)
+

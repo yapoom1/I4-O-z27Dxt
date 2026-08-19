@@ -769,3 +769,64 @@ class PaymentGatewayService:
 
         await db.refresh(order)
         return order
+
+    @staticmethod
+    async def verify_cart_payment(
+        db: AsyncSession,
+        tenant_id: uuid.UUID,
+        user_id: uuid.UUID,
+        payment_id: str,
+        signature: str,
+        rzp_order_id: str
+    ) -> Order:
+        """Verify Razorpay cart payment, create the actual Order, and clear the cart."""
+        # 1. Fetch the pending cart payment by gateway_order_id
+        from app.payments.models import PendingCartPayment
+        stmt = select(PendingCartPayment).where(
+            (PendingCartPayment.gateway_order_id == rzp_order_id) &
+            (PendingCartPayment.tenant_id == tenant_id) &
+            (PendingCartPayment.user_id == user_id)
+        )
+        res = await db.execute(stmt)
+        pending = res.scalar_one_or_none()
+        
+        if not pending:
+            raise ValidationError("Pending cart payment not found.")
+
+        # 2. Prevent duplicate processing
+        if pending.status == "COMPLETED":
+            # If already completed by webhook or earlier request, just find the associated order.
+            # We assume the order has the gateway_response with payment_id
+            from app.orders.models import OrderPayment, Order
+            stmt_order = select(Order).join(OrderPayment).where(OrderPayment.transaction_reference == payment_id)
+            res_order = await db.execute(stmt_order)
+            existing_order = res_order.scalar_one_or_none()
+            if existing_order:
+                return existing_order
+            raise ValidationError("Payment already processed but order not found.")
+
+        # 3. Create actual Order from the pending snapshot constraints & clear cart
+        from app.orders.services import order_service
+        order = await order_service.create_order_from_pending_payment(db, pending)
+
+        # 4. Update PendingCartPayment status
+        pending.status = "COMPLETED"
+        resp = dict(pending.gateway_response or {})
+        resp["payment_id"] = payment_id
+        pending.gateway_response = resp
+        
+        # 5. Record payment transaction for the new Order
+        await order_service.add_payment(
+            db=db,
+            tenant_id=tenant_id,
+            order_id=order.id,
+            amount=order.grand_total,
+            payment_method="RAZORPAY",
+            transaction_reference=payment_id,
+            status="COMPLETED",
+            gateway_response={"razorpay_payment_id": payment_id, "razorpay_signature": signature}
+        )
+
+        await db.commit()
+        await db.refresh(order)
+        return order

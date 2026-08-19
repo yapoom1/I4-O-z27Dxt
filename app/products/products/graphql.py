@@ -240,10 +240,9 @@ class ProductType:
     @strawberry.field
     async def children(self, info: strawberry.Info) -> List["ProductType"]:
         """Resolve child products (variants)."""
-        tenant_id = info.context.tenant_id or self.tenant_id
-        db_children = await DBProduct.find(
-            {"parent_id": self.id, "tenant_id": tenant_id}
-        ).sort("-created_at").to_list()
+        if not info.context.dataloaders:
+            return []
+        db_children = await info.context.dataloaders.children_loader.load(self.id)
         return [ProductType(c) for c in db_children]
 
     @strawberry.field
@@ -277,11 +276,10 @@ class ProductType:
     @strawberry.field
     async def prices(self, info: strawberry.Info) -> List[Annotated["ProductPriceType", strawberry.lazy("app.products.pricing.graphql")]]:
         """Resolve all product price mappings."""
-        db = info.context.db
-        tenant_id = info.context.tenant_id or self.tenant_id
-        from app.products.pricing.services import pricing_service
+        if not info.context.dataloaders:
+            return []
         from app.products.pricing.graphql import ProductPriceType
-        db_prices = await pricing_service.get_product_prices(db, tenant_id, self.id)
+        db_prices = await info.context.dataloaders.product_prices_loader.load(self.id)
         return [ProductPriceType(p) for p in db_prices]
 
     @strawberry.field
@@ -295,11 +293,10 @@ class ProductType:
     @strawberry.field
     async def media(self, info: strawberry.Info) -> List[MediaType]:
         """Resolve all associated media files for this product."""
-        db = info.context.db
-        tenant_id = info.context.tenant_id or self.tenant_id
-        from app.media.services import media_service
-        db_media_list = await media_service.get_media_list(db, tenant_id, entity_name="product", entity_id=self.id)
-        return [MediaType(m) for m in db_media_list]
+        if not info.context.dataloaders:
+            return []
+        db_media = await info.context.dataloaders.product_media_loader.load(self.id)
+        return [MediaType(m) for m in db_media]
 
     @strawberry.field
     async def categories(self, info: strawberry.Info) -> List[Annotated["CategoryType", strawberry.lazy("app.products.categories.graphql")]]:

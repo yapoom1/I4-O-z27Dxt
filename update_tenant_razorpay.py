@@ -4,7 +4,7 @@ import json
 import uuid
 from datetime import datetime
 
-DB_URL = 'postgres://neondb_owner:npg_Kj5Bl0fRNJpu@ep-rough-queen-aoh350r2-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require'
+DB_URL = 'postgres://neondb_owner:npg_gZAeSy0sbn3I@ep-raspy-queen-aztfxgbc-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require'
 
 async def update_tenant_razorpay(tenant_name: str, key_id: str, key_secret: str, webhook_secret: str):
     conn = await asyncpg.connect(DB_URL)
