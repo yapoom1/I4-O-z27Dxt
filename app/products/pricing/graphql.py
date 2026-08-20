@@ -41,16 +41,9 @@ class ProductPriceType:
     @strawberry.field
     async def pricing_type(self, info: strawberry.Info) -> PricingTypeType:
         """Resolve the associated pricing type details."""
-        db = info.context.db
-        
-        # Resolve by ID directly to avoid context mismatch issues (e.g. Admin viewing cross-tenant data)
-        from sqlalchemy.future import select
-        from app.products.pricing.models import PricingType
-        
-        stmt = select(PricingType).where(PricingType.id == self.pricing_type_id)
-        res = await db.execute(stmt)
-        db_pt = res.scalar_one_or_none()
-        
+        if not info.context.dataloaders:
+            raise ValidationError("Dataloaders not available.")
+        db_pt = await info.context.dataloaders.pricing_type_loader.load(self.pricing_type_id)
         if not db_pt:
             raise ValidationError("Pricing type not found.")
         return PricingTypeType(db_pt)
@@ -91,11 +84,9 @@ class ProductPricingRuleType:
     async def pricing_type(self, info: strawberry.Info) -> Optional[PricingTypeType]:
         if not self.pricing_type_id:
             return None
-        db = info.context.db
-        tenant_id = info.context.tenant_id or (info.context.user.tenant_id if info.context.user else None)
-        if not tenant_id:
-            raise ValidationError("Tenant ID context is missing.")
-        db_pt = await pricing_service.get_pricing_type_by_id(db, tenant_id, self.pricing_type_id)
+        if not info.context.dataloaders:
+            return None
+        db_pt = await info.context.dataloaders.pricing_type_loader.load(self.pricing_type_id)
         return PricingTypeType(db_pt) if db_pt else None
 
     def __init__(self, db_rule: DBProductPricingRule):

@@ -9,6 +9,17 @@ from app.products.categories.mongo_models import Category as MongoCategory
 from app.products.products.mongo_models import Product as DBProduct
 from app.products.pricing.models import ProductPrice, PricingType
 
+async def load_pricing_types_by_ids(keys: List[uuid.UUID], db: AsyncSession, tenant_id: uuid.UUID) -> List[Optional[PricingType]]:
+    """Batch load PricingType by their IDs."""
+    stmt = select(PricingType).where(
+        PricingType.id.in_(keys),
+        PricingType.tenant_id == tenant_id
+    )
+    res = await db.execute(stmt)
+    pt_records = res.scalars().all()
+    pt_map = {pt.id: pt for pt in pt_records}
+    return [pt_map.get(key) for key in keys]
+
 async def load_media_by_ids(keys: List[uuid.UUID], db: AsyncSession, tenant_id: uuid.UUID) -> List[Optional[Media]]:
     """Batch load Media by their IDs."""
     stmt = select(Media).where(
@@ -102,6 +113,7 @@ class DataLoaders:
         self.product_prices_loader = DataLoader(load_fn=self._load_product_prices)
         self.children_loader = DataLoader(load_fn=self._load_children)
         self.product_media_loader = DataLoader(load_fn=self._load_product_media)
+        self.pricing_type_loader = DataLoader(load_fn=self._load_pricing_types)
 
     async def _load_media(self, keys: List[uuid.UUID]) -> List[Optional[Media]]:
         return await load_media_by_ids(keys, self.db, self.tenant_id)
@@ -123,3 +135,6 @@ class DataLoaders:
 
     async def _load_product_media(self, keys: List[uuid.UUID]) -> List[List[Media]]:
         return await load_media_by_entity_ids(keys, self.db, self.tenant_id)
+
+    async def _load_pricing_types(self, keys: List[uuid.UUID]) -> List[Optional[PricingType]]:
+        return await load_pricing_types_by_ids(keys, self.db, self.tenant_id)
