@@ -127,7 +127,10 @@ async def upload_file(
     # Prepare Vercel Blob REST Request
     headers = {
         "Authorization": f"Bearer {settings.VERCEL_BLOB_READ_WRITE_TOKEN}",
-        "x-api-version": "7"
+        "x-api-version": "7",
+        # TODO: Temporarily set to private for the private blob store. 
+        # MUST REMOVE or change to "public" once migrating to a Public Blob store for e-commerce images.
+        "x-access": "private"
     }
     
     file_bytes = await file.read()
