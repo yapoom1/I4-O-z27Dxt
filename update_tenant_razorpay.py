@@ -68,10 +68,10 @@ async def update_tenant_razorpay(tenant_name: str, key_id: str, key_secret: str,
 
 if __name__ == '__main__':
     # Replace these with real credentials!
-    TARGET_TENANT = 'ASHAROYDEN'
-    RAZORPAY_KEY_ID = 'rzp_live_TP9OmKzavvnqZT'
-    RAZORPAY_KEY_SECRET = 'vYl55Cc41sdB8HmUXH4Cgiwm'
-    WEBHOOK_SECRET = 'TgL_PRZQ_9d9Pp_'
+    TARGET_TENANT = 'Vathukadai'
+    RAZORPAY_KEY_ID = 'rzp_live_TUkduudrj5mxx7'
+    RAZORPAY_KEY_SECRET = 'qLtEdpcbKZiS7c4o3omOjn0Z'
+    WEBHOOK_SECRET = None
 
     print(f"Updating Razorpay for {TARGET_TENANT}...")
     asyncio.run(update_tenant_razorpay(TARGET_TENANT, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, WEBHOOK_SECRET))

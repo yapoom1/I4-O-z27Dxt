@@ -86,12 +86,14 @@ class OrderService:
         discount_applied = calc["discount_applied"]
 
         # 4. Delivery details
-        delivery_fee = Decimal(str(cart.delivery_fee)) if cart.delivery_fee is not None else Decimal("0.00")
+        if str(tenant_id) == "6b1e8aed-ed2c-4d4f-8fd2-682488943f2a":
+            delivery_fee = Decimal("99.00")
+        else:
+            delivery_fee = Decimal(str(cart.delivery_fee)) if cart.delivery_fee is not None else Decimal("0.00")
 
-        # 5. Totals & Tax (5%)
+        # 5. Totals (no tax)
         net_total = max(Decimal("0.00"), item_total - discount_applied + delivery_fee)
-        tax = (net_total * Decimal("0.05")).quantize(Decimal("0.01"))
-        grand_total = (net_total + tax).quantize(Decimal("0.01"))
+        grand_total = net_total.quantize(Decimal("0.01"))
 
         # 6. Create Order
         order = Order(
@@ -103,7 +105,7 @@ class OrderService:
             estimated_days=cart.estimated_days,
             item_total=item_total,
             discount_applied=discount_applied,
-            tax=tax,
+            tax=Decimal("0.00"),
             grand_total=grand_total,
             order_status="PENDING",
             payment_status="UNPAID",

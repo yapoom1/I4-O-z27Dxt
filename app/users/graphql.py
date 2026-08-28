@@ -109,7 +109,14 @@ class BillSummaryType:
 class UserCartType:
     id: uuid.UUID
     user_id: uuid.UUID = strawberry.field(name="userId")
-    delivery_fee: Optional[float] = strawberry.field(name="deliveryFee")
+    _delivery_fee: Optional[float]
+
+    @strawberry.field(name="deliveryFee")
+    def delivery_fee(self, info: strawberry.Info) -> Optional[float]:
+        tenant_id = info.context.tenant_id or (info.context.user.tenant_id if info.context.user else None)
+        if tenant_id and str(tenant_id) == "6b1e8aed-ed2c-4d4f-8fd2-682488943f2a":
+            return 99.0
+        return self._delivery_fee
     delivery_service: Optional[str] = strawberry.field(name="deliveryService")
     estimated_days: Optional[int] = strawberry.field(name="estimatedDays")
     delivery_address_id: Optional[uuid.UUID] = strawberry.field(name="deliveryAddressId")
@@ -201,10 +208,16 @@ class UserCartType:
         items = res_items.all()
 
         item_total = Decimal("0.00")
+        # Resolve each product's actual tenant from MongoDB so the displayed price
+        # matches exactly what initiate_cart_payment sends to Razorpay.
+        from app.products.products.mongo_models import Product as MongoProduct
         for product_id, qty, stock in items:
+            mongo_product = await MongoProduct.find_one({"_id": product_id})
+            product_tenant_id = mongo_product.tenant_id if mongo_product else tenant_id
+
             effective_price = await PricingService.get_effective_price(
                 db=db,
-                tenant_id=tenant_id,
+                tenant_id=product_tenant_id,
                 product_id=product_id,
                 quantity=qty,
                 location_id=None,
@@ -220,25 +233,27 @@ class UserCartType:
         discount_applied = calc["discount_applied"]
 
         # 3. Delivery Fee
-        delivery_fee = Decimal(str(self.delivery_fee)) if self.delivery_fee is not None else Decimal("0.00")
+        if str(tenant_id) == "6b1e8aed-ed2c-4d4f-8fd2-682488943f2a":
+            delivery_fee = Decimal("99.00")
+        else:
+            delivery_fee = Decimal(str(self._delivery_fee)) if self._delivery_fee is not None else Decimal("0.00")
 
-        # 4. Net Total & Tax (5%) & Grand Total
+        # 4. Net Total & Grand Total (no tax)
         net_total = max(Decimal("0.00"), item_total - discount_applied + delivery_fee)
-        tax = (net_total * Decimal("0.05")).quantize(Decimal("0.01"))
-        grand_total = (net_total + tax).quantize(Decimal("0.01"))
+        grand_total = net_total.quantize(Decimal("0.01"))
 
         return BillSummaryType(
             item_total=float(item_total),
             discount_applied=float(discount_applied),
             delivery_fee=float(delivery_fee),
-            tax=float(tax),
+            tax=0.0,
             grand_total=float(grand_total)
         )
 
     def __init__(self, db_cart):
         self.id = db_cart.id
         self.user_id = db_cart.user_id
-        self.delivery_fee = float(db_cart.delivery_fee) if db_cart.delivery_fee is not None else None
+        self._delivery_fee = float(db_cart.delivery_fee) if db_cart.delivery_fee is not None else None
         self.delivery_service = db_cart.delivery_service
         self.estimated_days = db_cart.estimated_days
         self.delivery_address_id = db_cart.delivery_address_id

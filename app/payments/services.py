@@ -420,10 +420,21 @@ class PaymentGatewayService:
 
         cart_products = []
         item_total = Decimal("0.00")
+
+        # Resolve each product's actual tenant from MongoDB so pricing is always correct
+        # regardless of which tenant header the user sent during checkout.
+        from app.products.products.mongo_models import Product as MongoProduct
+
         for prod_id, qty, stock in items:
+            # Look up the product's real tenant from MongoDB
+            mongo_product = await MongoProduct.find_one({"_id": prod_id})
+            product_tenant_id = mongo_product.tenant_id if mongo_product else tenant_id
+
+            print(f"[CART LOG] Product {prod_id}: header_tenant={tenant_id}, product_tenant={product_tenant_id}")
+
             effective_price = await PricingService.get_effective_price(
                 db=db,
-                tenant_id=tenant_id,
+                tenant_id=product_tenant_id,
                 product_id=prod_id,
                 quantity=qty,
                 location_id=None,
@@ -431,8 +442,11 @@ class PaymentGatewayService:
                 current_time=None,
                 current_stock=stock
             )
+            print(f"[CART LOG]   -> Qty: {qty}, Price: {effective_price}, Subtotal: {effective_price * qty}")
             cart_products.append((prod_id, qty, effective_price))
             item_total += effective_price * qty
+
+        print(f"[CART LOG] ITEM TOTAL: {item_total}")
 
         # 3. Calculate coupon discount
         from app.promotions.services import coupon_service
@@ -443,12 +457,14 @@ class PaymentGatewayService:
         discount_applied = calc["discount_applied"]
 
         # 4. Delivery details
-        delivery_fee = Decimal(str(cart.delivery_fee)) if cart.delivery_fee is not None else Decimal("0.00")
+        if str(tenant_id) == "6b1e8aed-ed2c-4d4f-8fd2-682488943f2a":
+            delivery_fee = Decimal("99.00")
+        else:
+            delivery_fee = Decimal(str(cart.delivery_fee)) if cart.delivery_fee is not None else Decimal("0.00")
 
-        # 5. Totals & Tax (5%)
+        # 5. Totals (no tax)
         net_total = max(Decimal("0.00"), item_total - discount_applied + delivery_fee)
-        tax = (net_total * Decimal("0.05")).quantize(Decimal("0.01"))
-        grand_total = (net_total + tax).quantize(Decimal("0.01"))
+        grand_total = net_total.quantize(Decimal("0.01"))
 
         # 6. Allocate discount proportionally to cart items for constraints storage
         allocated_discount_sum = Decimal("0.00")
@@ -522,6 +538,16 @@ class PaymentGatewayService:
 
         total_paise = int(round(grand_total * 100))
         
+        print(f"--- CART CALCULATION LOG ---")
+        print(f"Item Total: {item_total}")
+        print(f"Discount Applied: {discount_applied}")
+        print(f"Delivery Fee: {delivery_fee}")
+        print(f"Grand Total: {grand_total}")
+        print(f"Total Paise (sending to Razorpay): {total_paise}")
+        print(f"Cart Products: {cart_products}")
+        print(f"----------------------------")
+
+        
         # Prepare Razorpay payload
         payload = {
             "amount": total_paise,
@@ -578,7 +604,17 @@ class PaymentGatewayService:
                         timeout=10.0
                     )
                     if response.status_code != 200:
-                        raise ValidationError(f"Failed to initiate order with Razorpay: {response.text}")
+                        error_detail = response.text
+                        try:
+                            # Try to parse the error message if it's JSON
+                            err_json = response.json()
+                            if "error" in err_json and "description" in err_json["error"]:
+                                error_detail = err_json["error"]["description"]
+                            else:
+                                error_detail = str(err_json)
+                        except Exception:
+                            pass
+                        raise ValidationError(f"Failed to initiate order with Razorpay: {error_detail}")
                     gateway_response = response.json()
                     rzp_order_id = gateway_response.get("id")
                 except httpx.RequestError as exc:
@@ -595,7 +631,7 @@ class PaymentGatewayService:
             "delivery_fee": float(delivery_fee),
             "delivery_service": cart.delivery_service,
             "estimated_days": cart.estimated_days,
-            "tax": float(tax),
+            "tax": 0.0,
             "grand_total": float(grand_total),
             "applied_coupons": applied_codes,
             "delivery_address_id": str(cart.delivery_address_id) if cart.delivery_address_id else None
