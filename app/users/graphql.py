@@ -115,7 +115,7 @@ class UserCartType:
     def delivery_fee(self, info: strawberry.Info) -> Optional[float]:
         tenant_id = info.context.tenant_id or (info.context.user.tenant_id if info.context.user else None)
         if tenant_id and str(tenant_id) == "6b1e8aed-ed2c-4d4f-8fd2-682488943f2a":
-            return 99.0
+            return 1.0
         return self._delivery_fee
     delivery_service: Optional[str] = strawberry.field(name="deliveryService")
     estimated_days: Optional[int] = strawberry.field(name="estimatedDays")
@@ -234,7 +234,7 @@ class UserCartType:
 
         # 3. Delivery Fee
         if str(tenant_id) == "6b1e8aed-ed2c-4d4f-8fd2-682488943f2a":
-            delivery_fee = Decimal("99.00")
+            delivery_fee = Decimal("1.00")
         else:
             delivery_fee = Decimal(str(self._delivery_fee)) if self._delivery_fee is not None else Decimal("0.00")
 
