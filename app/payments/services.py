@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.utils.exceptions import ValidationError
 from app.payments.models import PaymentGateway, TenantPaymentGateway, TenantCommission, PendingCartPayment
 from app.orders.models import Order, OrderPayment
+from app.tenants.models import Tenant
 
 logger = logging.getLogger(__name__)
 
@@ -216,6 +217,11 @@ class PaymentGatewayService:
         if not order:
             raise ValidationError("Order not found.")
 
+        # Fetch Tenant business name
+        stmt_tenant = select(Tenant.business_name).where(Tenant.id == tenant_id)
+        res_tenant = await db.execute(stmt_tenant)
+        tenant_name = res_tenant.scalar_one_or_none() or "Gubera Checkout"
+
         # 2. Check for active direct tenant gateway
         stmt_tg = (
             select(TenantPaymentGateway)
@@ -364,7 +370,7 @@ class PaymentGatewayService:
             "key": key_id,
             "amount": total_paise,
             "currency": "INR",
-            "name": "Gubera Tenant Checkout" if is_fallback else f"Tenant Checkout",
+            "name": tenant_name,
             "order_id": rzp_order_id,
             "payment_id": str(payment.id)
         }
@@ -378,6 +384,11 @@ class PaymentGatewayService:
         """Process cart details, calculate pricing constraints, initiate Razorpay order,
         and store the pending checkout session details before returning to user."""
         
+        # Fetch Tenant business name
+        stmt_tenant = select(Tenant.business_name).where(Tenant.id == tenant_id)
+        res_tenant = await db.execute(stmt_tenant)
+        tenant_name = res_tenant.scalar_one_or_none() or "Gubera Cart Checkout"
+
         # 1. Fetch user's cart
         from app.users.models import UserCart, CartItem
         stmt_cart = select(UserCart).where(UserCart.user_id == user_id)
@@ -656,7 +667,7 @@ class PaymentGatewayService:
             "key": key_id,
             "amount": total_paise,
             "currency": "INR",
-            "name": "Gubera Cart Checkout" if is_fallback else "Tenant Cart Checkout",
+            "name": tenant_name,
             "order_id": rzp_order_id,
             "payment_id": str(pending_payment.id)
         }
